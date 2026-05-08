@@ -54,3 +54,7 @@ services:
       - frontend.openelis.org
     ports:
       - "${OPENELIS_PROXY_PORT:-80}:80"
+
+networks:
+  openelis-network:
+    name: openelis-{{ context_slug }}-network
