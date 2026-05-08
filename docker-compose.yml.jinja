@@ -13,6 +13,7 @@ services:
     image: ${OE_IMAGE:-itechuw/openelis-global-2:develop}
     depends_on:
       - db.openelis.org
+      - fhir.openelis.org
     environment:
       TZ: "{{ timezone }}"
       OPENELIS_CONFIGURATION_INSTANCE_ID: "{{ context_slug }}"
@@ -24,9 +25,32 @@ services:
     ports:
       - "${OPENELIS_HTTP_PORT:-8080}:8080"
 
-  proxy:
-    image: nginx:alpine
+  frontend.openelis.org:
+    image: ${FRONTEND_IMAGE:-itechuw/openelis-global-2-frontend:develop}
     depends_on:
       - oe.openelis.org
+    environment:
+      TZ: "{{ timezone }}"
+
+  fhir.openelis.org:
+    image: ${FHIR_IMAGE:-itechuw/openelis-global-2-fhir:develop}
+    environment:
+      TZ: "{{ timezone }}"
+
+  openelis-analyzer-bridge:
+    image: ${BRIDGE_IMAGE:-itechuw/openelis-analyzer-bridge:develop}
+    depends_on:
+      - oe.openelis.org
+    environment:
+      TZ: "{{ timezone }}"
+      ORG_ITECH_AHB_FORWARD_HTTP_SERVER_URI: https://oe.openelis.org:8443/OpenELIS-Global/analyzer
+    ports:
+      - "${ANALYZER_BRIDGE_PORT:-8442}:8443"
+
+  proxy:
+    image: ${PROXY_IMAGE:-itechuw/openelis-global-2-proxy:develop}
+    depends_on:
+      - oe.openelis.org
+      - frontend.openelis.org
     ports:
       - "${OPENELIS_PROXY_PORT:-80}:80"
