@@ -1,0 +1,32 @@
+services:
+  db.openelis.org:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: clinlims
+      POSTGRES_USER: clinlims
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password}
+      TZ: "{{ timezone }}"
+    volumes:
+      - ./configs/database/data:/var/lib/postgresql/data
+
+  oe.openelis.org:
+    image: ${OE_IMAGE:-itechuw/openelis-global-2:develop}
+    depends_on:
+      - db.openelis.org
+    environment:
+      TZ: "{{ timezone }}"
+      OPENELIS_CONFIGURATION_INSTANCE_ID: "{{ context_slug }}"
+      DEFAULT_NATIONALITY: "{{ default_nationality }}"
+    volumes:
+      - ./configs/properties:/run/configs/properties:ro
+      - ./configs/configuration/backend:/run/configs/configuration/backend:ro
+      - ./configs/analyzer-profiles:/run/configs/analyzer-profiles:ro
+    ports:
+      - "${OPENELIS_HTTP_PORT:-8080}:8080"
+
+  proxy:
+    image: nginx:alpine
+    depends_on:
+      - oe.openelis.org
+    ports:
+      - "${OPENELIS_PROXY_PORT:-80}:80"

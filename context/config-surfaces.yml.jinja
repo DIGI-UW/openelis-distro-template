@@ -1,0 +1,49 @@
+surfaces:
+  - id: project_identity
+    path: README.md
+    kind: edit-keys
+    default_source: context/profiles/demo/context.yml
+    docs_url: docs/contextualization.md#project-identity
+    replace_instructions: Replace demo project name, context name, and banner text.
+    validation:
+      required: true
+  - id: env_defaults
+    path: .env.example
+    kind: env-default
+    default_source: context/profiles/demo/context.yml
+    docs_url: docs/contextualization.md#environment-defaults
+    replace_instructions: Copy to .env locally and set deploy-specific ports/secrets.
+    validation:
+      required: true
+  - id: system_properties
+    path: configs/properties/SystemConfiguration.properties
+    kind: edit-keys
+    default_source: context/profiles/demo/context.yml
+    docs_url: docs/contextualization.md#system-properties
+    replace_instructions: Replace nationality, labels, phone rules, EQA, and banner values.
+    validation:
+      required: true
+  - id: common_properties
+    path: configs/properties/common.properties
+    kind: edit-keys
+    default_source: context/profiles/demo/context.yml
+    docs_url: docs/contextualization.md#common-properties
+    replace_instructions: Replace facility and location identity defaults.
+    validation:
+      required: true
+  - id: timezone
+    path: docker-compose.yml
+    kind: edit-keys
+    default_source: context/profiles/demo/context.yml
+    docs_url: docs/contextualization.md#timezone
+    replace_instructions: Set the IANA timezone for service containers.
+    validation:
+      required: true
+  - id: analyzer_profiles
+    path: configs/analyzer-profiles
+    kind: replace-file
+    default_source: configs/analyzer-profiles
+    docs_url: docs/analyzer-profiles.md
+    replace_instructions: Keep vendor profiles that apply; add country overlays separately.
+    validation:
+      required: false

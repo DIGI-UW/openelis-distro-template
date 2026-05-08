@@ -1,0 +1,44 @@
+# Local secrets and env
+.env
+.env.local
+.env.*.local
+.env.letsencrypt
+
+# Locally-built release tarballs
+openelis-{{ context_slug }}-distro-*.tar.gz
+
+# Local compose overrides
+compose.yaml
+compose.override.yaml
+compose.override.yml
+docker-compose.override.yml
+
+# Runtime data and generated OpenELIS overrides
+configs/logs/
+configs/database/data*/
+**/*checksum*.properties
+**/*checksums*.properties
+configs/properties/TotalSystemConfiguration.properties
+configs/properties/ChangedSystemConfiguration.properties
+
+# Runtime TLS / ACME material
+configs/letsencrypt/live/
+configs/letsencrypt/archive/
+configs/letsencrypt/renewal/
+configs/letsencrypt/accounts/
+volume/letsencrypt/live/
+volume/letsencrypt/archive/
+volume/letsencrypt/renewal/
+volume/letsencrypt/accounts/
+volume/letsencrypt-staging/
+volume/letsencrypt-staging-logs/
+
+# Test and IDE artifacts
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+.cursor/
+.claude/
+.idea/
+.DS_Store

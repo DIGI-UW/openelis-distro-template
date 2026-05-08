@@ -1,0 +1,43 @@
+_min_copier_version: "9.0.0"
+_answers_file: .copier-answers.yml
+_exclude:
+  - .git
+  - .venv
+  - copier.yml
+  - .github
+  - scripts
+
+context_slug:
+  type: str
+  default: demo
+  help: Lowercase context slug used in repo names and generated paths.
+
+context_name:
+  type: str
+  default: Demo Country
+  help: Human-readable country or implementation context name.
+
+project_name:
+  type: str
+  default: OpenELIS Demo Distro
+  help: Display name used in README and banner defaults.
+
+timezone:
+  type: str
+  default: UTC
+  help: IANA timezone for Docker services.
+
+default_nationality:
+  type: str
+  default: Demo
+  help: DEFAULT_NATIONALITY value for SystemConfiguration.properties.
+
+facility_id:
+  type: str
+  default: demo-facility
+  help: Default OpenELIS facility identifier.
+
+public_hostname:
+  type: str
+  default: demo.openelis.example.org
+  help: Example production hostname for TLS documentation and .env defaults.
