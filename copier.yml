@@ -4,8 +4,11 @@ _exclude:
   - .git
   - .venv
   - copier.yml
-  - .github
-  - scripts
+  # Template repo's own CI (exercises copier copy on every PR) — not for
+  # generated distros. The release workflow added by C8 is .jinja-suffixed
+  # and ships normally.
+  - .github/workflows/pr.yml
+  # Build-time-only post-generate tasks, run from the template source.
   - tools/copier_tasks
 
 # .env.example carries generated secrets after `copier copy`; never overwrite
@@ -51,3 +54,8 @@ public_hostname:
   type: str
   default: demo.openelis.example.org
   help: Example production hostname for TLS documentation and .env defaults.
+
+tarball_basename:
+  type: str
+  default: openelis-{{ context_slug }}-distro
+  help: Basename for release tarballs (e.g. <basename>-3.2.2.0.tar.gz).

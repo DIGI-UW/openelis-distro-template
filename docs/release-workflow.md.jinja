@@ -1,0 +1,92 @@
+# Release Workflow
+
+Each generated distro ships with a manual-dispatch GitHub Actions workflow
+that tags a release, refreshes image digests, and publishes a GitHub
+Release with consolidated upstream notes. Releases are immutable artifacts
+of the canonical-state tree at the tagged commit — no env-var
+substitution, no rewriting at deploy time.
+
+## Cutting a release
+
+From the GitHub UI: **Actions → Release → Run workflow**.
+
+From the CLI:
+
+```bash
+gh workflow run release.yml \
+  -f distro_version=3.2.2.0 \
+  -f oe_version=3.2.1.6 \
+  -f bridge_version=3.0.1
+```
+
+### Inputs
+
+| Input | Required | Purpose |
+| ----- | -------- | ------- |
+| `distro_version` | yes | Distro release version (e.g. `3.2.2.0`). Must not collide with an existing tag. Semver-shaped. |
+| `oe_version` | yes | OpenELIS Global image tag (e.g. `3.2.1.6`). `develop` requires `allow_develop_pins=true`. |
+| `bridge_version` | yes | Analyzer Bridge image tag (e.g. `3.0.1`). Same rule as `oe_version`. |
+| `base_ref` | no | Branch or commit SHA to release from. Defaults to `main`. |
+| `allow_develop_pins` | no | Permit non-release pins (`:develop`, `:latest`, etc.). Off by default — the pin-check gate fails the run if any image: line still resolves to a moving label. |
+| `draft` | no | Create the GitHub Release as a draft for review. On by default. |
+| `prerelease` | no | Mark the release as a pre-release. Off by default. |
+
+## What the workflow does
+
+1. **Validates inputs.** Refuses if `distro_version` is not semver-shaped
+   or if a tag with that name already exists on origin.
+2. **Refreshes image pins.** Runs `./scripts/pin-versions.sh
+   $OE_VERSION $BRIDGE_VERSION`, which rewrites the `image:` lines in
+   `docker-compose.yml`.
+3. **Validates pin shape.** Unless `allow_develop_pins=true`, runs
+   `./scripts/check-release-pins.sh`. Fails if any pin resolves to
+   `:develop`, `:latest`, `:main`, `:master`, `:nightly`, or an empty
+   tag.
+4. **Commits the digest refresh, tags, and pushes.** Commit message
+   names the distro/OE/bridge versions. The commit is reachable only
+   via the new tag (`base_ref` does not move).
+5. **Builds the tarball.** `./scripts/build-tarball.sh
+   <distro_version>` produces `{{ tarball_basename }}-<distro_version>.tar.gz` via
+   `git archive`, byte-shape-equivalent to a GitHub auto-archive.
+6. **Builds release notes.** `./scripts/build-release-notes.sh`
+   assembles a markdown body from distro commits since the previous
+   tag, the upstream OE release body (fetched via `gh api`), and the
+   upstream bridge release body.
+7. **Publishes the GitHub Release.** Attaches the tarball as the
+   release asset. Marked as draft by default — review notes, then hit
+   *Publish*.
+
+A push to `main` (without a workflow_dispatch) takes a separate
+shortcut: it builds the tarball but does not tag or release. The
+artifact is retained as a 90-day workflow artifact for inspection.
+
+## Scripts
+
+The shell scripts under `scripts/` are templated from the
+[openelis-madagascar-distro](https://github.com/DIGI-UW/openelis-madagascar-distro)
+release machinery. Each is callable locally as well as from the
+workflow:
+
+- `scripts/build-tarball.sh [ref]` — package the tree at `ref` (default
+  `HEAD`) as `{{ tarball_basename }}-<ref>.tar.gz`.
+- `scripts/check-release-pins.sh` — assert every `image:` line in
+  `docker-compose.yml` resolves to a versioned tag.
+- `scripts/pin-versions.sh <oe-version> <bridge-version>` — rewrite
+  image pins in `docker-compose.yml`.
+- `scripts/build-release-notes.sh` — assemble markdown release notes
+  from distro commits and upstream releases. Reads from env vars:
+  `DISTRO_VERSION`, `OE_VERSION`, `BRIDGE_VERSION`, `PREVIOUS_TAG`,
+  `GH_TOKEN`. Prints to stdout.
+
+## Pre-release checklist
+
+Before triggering the workflow:
+
+- [ ] `python3 tools/contextualize/oe_context.py doctor --prod` passes.
+- [ ] Local secrets are rotated; `.env.example` doesn't ship a working
+      production secret.
+- [ ] `scripts/check-release-pins.sh` already passes against your
+      target `oe_version` and `bridge_version` (you can dry-run by
+      calling `pin-versions.sh` locally and inspecting the diff).
+- [ ] The distro README, banner, and contextualization values reflect
+      the current deployment identity.
