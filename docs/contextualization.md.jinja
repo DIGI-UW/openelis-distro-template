@@ -1,0 +1,49 @@
+# Contextualization Walkthrough
+
+This distro starts with a working demo profile. Replace demo values with local
+deployment values in the order below.
+
+Run:
+
+```bash
+python3 tools/contextualize/oe_context.py doctor
+python3 tools/contextualize/oe_context.py apply --profile demo --dry-run
+```
+
+## Project Identity
+
+Surface id: `project_identity`.
+
+Set `project_name` and `context_name` to the public-facing deployment identity.
+
+## Environment Defaults
+
+Surface id: `env_defaults`.
+
+Copy `.env.example` to `.env`, then replace generated secrets and ports.
+
+## System Properties
+
+Surface id: `system_properties`.
+
+Review banner text, default nationality, phone validation rules, geographic
+labels, and EQA defaults.
+
+## Common Properties
+
+Surface id: `common_properties`.
+
+Set `org.openelisglobal.facility.id` and location identity values.
+
+## Timezone
+
+Surface id: `timezone`.
+
+Use a valid IANA timezone, for example `UTC` or `Africa/Nairobi`.
+
+## Analyzer Profiles
+
+Surface id: `analyzer_profiles`.
+
+Keep generic vendor profiles that match the deployment, then add country-specific
+test-code mappings in the generated country repo.

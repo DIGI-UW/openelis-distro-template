@@ -1,0 +1,23 @@
+# {{ project_name }}
+
+Deployable OpenELIS distribution for {{ context_name }}.
+
+## Quickstart
+
+```bash
+cp .env.example .env
+docker compose up -d
+```
+
+## Contextualization
+
+Start from the demo defaults, then replace them with deployment-specific values:
+
+```bash
+python3 tools/contextualize/oe_context.py doctor
+python3 tools/contextualize/oe_context.py apply --profile demo --dry-run
+python3 tools/contextualize/oe_context.py apply --profile demo --non-interactive
+```
+
+The walkthrough in `docs/contextualization.md` follows the same order as
+`context/config-surfaces.yml`, which is also the manifest used by the CLI.

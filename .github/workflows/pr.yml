@@ -1,0 +1,34 @@
+name: Template PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  generate-demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tooling
+        run: pip install copier typer questionary pyyaml
+      - name: Generate demo distro
+        run: |
+          copier copy --trust --defaults \
+            --data context_slug=demo \
+            --data context_name='Demo Country' \
+            --data project_name='OpenELIS Demo Distro' \
+            --data timezone=UTC \
+            --data default_nationality=Demo \
+            --data facility_id=demo-facility \
+            --data public_hostname=demo.openelis.example.org \
+            . generated/demo-distro
+      - name: Validate generated distro
+        working-directory: generated/demo-distro
+        run: |
+          python tools/contextualize/oe_context.py doctor
+          python tools/contextualize/oe_context.py apply --profile demo --non-interactive --dry-run
+          docker compose config
