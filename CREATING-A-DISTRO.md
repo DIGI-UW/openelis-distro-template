@@ -13,9 +13,14 @@ the same flow applies to any country/site.
 
 - Python 3.10+ and either `pipx` or `pip --user`.
 - Docker Desktop (macOS/Windows) or Docker Engine + Compose v2 (Linux).
-- On Apple Silicon: enable Rosetta-based amd64 emulation in Docker
-  Desktop, or set `DOCKER_DEFAULT_PLATFORM=linux/amd64`. The upstream
-  OpenELIS images don't all ship arm64 manifests.
+- On Apple Silicon: nothing special required in most cases. OpenELIS
+  the codebase runs anywhere Java does, but the published
+  `itechuw/openelis-global-2` and `itechuw/openelis-analyzer-bridge`
+  images are amd64-only — Docker Desktop emulates them via Rosetta
+  by default and the stack boots fine, just a bit slower than native.
+  If you hit `no matching manifest for linux/arm64/v8`, enable
+  Rosetta in Docker Desktop → Settings → General, or set
+  `DOCKER_DEFAULT_PLATFORM=linux/amd64`.
 - `gh` CLI authenticated to GitHub (only needed if you'll cut a release
   from the new repo's release workflow).
 
@@ -28,11 +33,17 @@ copier copy --trust \
   openelis-png-distro
 ```
 
-`--trust` is required: the template runs a Copier post-generate task to
-materialize per-distro random secrets and merge the analyzer-profile
-tree. Without `--trust`, the task is gated behind a prompt; if you
-decline, `.env.example` keeps the `__GENERATED_SECRET__` sentinels and
-`configs/analyzer-profiles/.active/` is empty.
+This template runs Copier post-generate tasks to materialize per-distro
+random secrets and merge the analyzer-profile tree. Those tasks are
+gated behind a trust prompt by default. Interactively you'll see
+*"Do you trust this template's tasks?"* — answering `y` runs them.
+`--trust` skips the prompt, which is required when running
+non-interactively (CI, scripts with `--defaults`). If you decline the
+prompt or run non-interactively without `--trust`, `.env.example` keeps
+the `__GENERATED_SECRET__` sentinels and
+`configs/analyzer-profiles/.active/` is empty — you'd need to re-run
+`copier copy --trust` or run `oe_context.py apply` manually before the
+stack will boot.
 
 You'll be prompted for the answers below. Sensible PNG choices shown:
 
@@ -164,8 +175,12 @@ preserved. For other files, copier merges where it can and writes
 
 ## Known limitations and gotchas
 
-- **arm64 hosts:** upstream OE images are amd64-only on some tags.
-  Enable Rosetta or `DOCKER_DEFAULT_PLATFORM=linux/amd64`.
+- **arm64 hosts:** the published itechuw OpenELIS and bridge images are
+  amd64-only. The codebase itself supports any Java-capable platform.
+  Docker Desktop on Apple Silicon emulates amd64 transparently via
+  Rosetta — works out of the box at a perf cost. If a pull fails with
+  `no matching manifest for linux/arm64/v8`, enable Rosetta in Docker
+  Desktop or set `DOCKER_DEFAULT_PLATFORM=linux/amd64`.
 - **Port 80 / 8080 / 8442 collisions:** the defaults assume nothing else
   is bound on the host. Edit `.env` (`OPENELIS_PROXY_PORT`,
   `OPENELIS_HTTP_PORT`, `ANALYZER_BRIDGE_PORT`) if a conflict exists.
