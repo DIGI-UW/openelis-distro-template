@@ -2,6 +2,11 @@
 
 Deployable OpenELIS distribution for {{ context_name }}.
 
+This repo was generated from
+[openelis-distro-template](https://github.com/DIGI-UW/openelis-distro-template)
+via `copier copy --trust`. See `.copier-answers.yml` for the answers used.
+To pull template improvements later, run `copier update` from this repo.
+
 ## Quickstart
 
 ```bash
@@ -9,9 +14,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
+Open `http://localhost:8080/OpenELIS-Global/` once the stack is up.
+
+`.env.example` ships with secrets generated at template-render time
+(unique to this distro). They flow straight into the demo stack so the
+quickstart boots without further edits.
+
 ## Contextualization
 
-Start from the demo defaults, then replace them with deployment-specific values:
+Start from the demo defaults, then replace them with deployment-specific
+values:
 
 ```bash
 python3 tools/contextualize/oe_context.py doctor
@@ -19,5 +31,32 @@ python3 tools/contextualize/oe_context.py apply --profile demo --dry-run
 python3 tools/contextualize/oe_context.py apply --profile demo --non-interactive
 ```
 
-The walkthrough in `docs/contextualization.md` follows the same order as
-`context/config-surfaces.yml`, which is also the manifest used by the CLI.
+The walkthrough in [docs/contextualization.md](docs/contextualization.md)
+follows the same order as `context/config-surfaces.yml`, which is also
+the manifest used by the CLI.
+
+## Pre-production gate
+
+Before going to production, rotate the generated secrets in `.env` and
+confirm:
+
+```bash
+python3 tools/contextualize/oe_context.py doctor --prod
+```
+
+This fails if `.env` still ships with the `.env.example` defaults or
+any known-bad upstream literals.
+
+## Analyzer profiles
+
+Vendor profiles ship under `configs/analyzer-profiles/core/`. Drop
+distro-specific overrides or additions into
+`configs/analyzer-profiles/distro/<protocol>/` and re-run `oe_context.py
+apply`. See [docs/analyzer-profiles.md](docs/analyzer-profiles.md).
+
+## Cutting a release
+
+`gh workflow run release.yml -f distro_version=X.Y.Z -f oe_version=... -f
+bridge_version=...` builds a tarball, rewrites image-tag pins, and
+publishes a draft GitHub Release. See
+[docs/release-workflow.md](docs/release-workflow.md).

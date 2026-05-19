@@ -12,6 +12,10 @@ image versions, add distro-specific analyzer profiles, and replace the demo
 facility identity with your deployment's. The `oe_context.py doctor --prod`
 gate flags anything that still looks demo-quality before you ship.
 
+**For a guided walkthrough** of creating a country/site distro,
+including a phase-by-phase checklist and a worked PNG example, see
+[CREATING-A-DISTRO.md](CREATING-A-DISTRO.md).
+
 ## Create a new distro in 60 seconds
 
 ```bash

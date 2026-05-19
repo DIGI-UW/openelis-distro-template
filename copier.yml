@@ -4,6 +4,9 @@ _exclude:
   - .git
   - .venv
   - copier.yml
+  # Template-side documentation, for the person creating a new distro.
+  # Generated distros get their own README.md.jinja-rendered README.
+  - CREATING-A-DISTRO.md
   # Template repo's own CI (exercises copier copy on every PR) — not for
   # generated distros. The release workflow added by C8 is .jinja-suffixed
   # and ships normally.

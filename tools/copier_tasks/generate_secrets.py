@@ -19,6 +19,13 @@ from pathlib import Path
 SENTINEL = "__GENERATED_SECRET__"
 TARGETS = (".env.example",)
 
+# Only replace sentinels that appear as the complete VALUE on a KEY=VALUE
+# line. Sentinels mentioned inside comments stay literal — they're
+# self-documenting references like "if you see __GENERATED_SECRET__ here,
+# the task didn't run". Matching the sentinel anywhere in the file would
+# rewrite the documentation along with the actual placeholders.
+LINE_RE = re.compile(rf"^([A-Z_][A-Z0-9_]*)={SENTINEL}\s*$", re.MULTILINE)
+
 
 def replace_sentinels(path: Path) -> int:
     if not path.exists():
@@ -26,12 +33,12 @@ def replace_sentinels(path: Path) -> int:
     text = path.read_text(encoding="utf-8")
     if SENTINEL not in text:
         return 0
-    new_text, count = re.subn(
-        re.escape(SENTINEL),
-        lambda _m: secrets.token_urlsafe(32),
+    new_text, count = LINE_RE.subn(
+        lambda m: f"{m.group(1)}={secrets.token_urlsafe(32)}",
         text,
     )
-    path.write_text(new_text, encoding="utf-8")
+    if count:
+        path.write_text(new_text, encoding="utf-8")
     return count
 
 
