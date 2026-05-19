@@ -24,7 +24,10 @@ services:
     volumes:
       - ./configs/properties:/run/configs/properties:ro
       - ./configs/configuration/backend:/run/configs/configuration/backend:ro
-      - ./configs/analyzer-profiles:/run/configs/analyzer-profiles:ro
+      # Populated by `python3 tools/contextualize/oe_context.py apply` (or
+      # by the copier post-generate task on initial render) from
+      # configs/analyzer-profiles/{core,distro}/.
+      - ./configs/analyzer-profiles/.active:/run/configs/analyzer-profiles:ro
     ports:
       - "${OPENELIS_HTTP_PORT:-8080}:8080"
     networks:

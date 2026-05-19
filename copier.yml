@@ -15,6 +15,7 @@ _skip_if_exists:
 
 _tasks:
   - ["python3", "{{ _copier_conf.src_path }}/tools/copier_tasks/generate_secrets.py"]
+  - ["python3", "{{ _copier_conf.src_path }}/tools/copier_tasks/merge_profiles.py"]
 
 context_slug:
   type: str

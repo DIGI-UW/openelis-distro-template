@@ -31,4 +31,6 @@ jobs:
         run: |
           python tools/contextualize/oe_context.py doctor
           python tools/contextualize/oe_context.py apply --profile demo --non-interactive --dry-run
+          python tools/contextualize/oe_context.py apply --profile demo --non-interactive
+          test -d configs/analyzer-profiles/.active/hl7
           docker compose config

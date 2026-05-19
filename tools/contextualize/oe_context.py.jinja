@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,10 @@ import typer
 import yaml
 
 app = typer.Typer(help="Contextualize this OpenELIS distro.")
+
+ANALYZER_PROFILES_DIR = "configs/analyzer-profiles"
+ANALYZER_SOURCES = ("core", "distro")
+ANALYZER_ACTIVE = ".active"
 
 
 def repo_root() -> Path:
@@ -87,6 +92,63 @@ def _parse_env(path: Path) -> dict[str, str]:
     return values
 
 
+def _check_analyzer_profile_overrides(root: Path) -> list[str]:
+    # Surface filename collisions between core/ and distro/ so the operator
+    # knows they're overriding intentionally. Never a failure — overrides
+    # are the supported workflow.
+    warnings: list[str] = []
+    base = root / ANALYZER_PROFILES_DIR
+    core_dir = base / "core"
+    distro_dir = base / "distro"
+    if not (core_dir.exists() and distro_dir.exists()):
+        return warnings
+    for distro_file in distro_dir.rglob("*.json"):
+        rel = distro_file.relative_to(distro_dir)
+        if (core_dir / rel).exists():
+            warnings.append(f"analyzer profile {rel} overrides core/")
+    return warnings
+
+
+def _merge_analyzer_profiles(root: Path, dry_run: bool = False) -> tuple[int, int]:
+    base = root / ANALYZER_PROFILES_DIR
+    active = base / ANALYZER_ACTIVE
+    copied = 0
+    overridden = 0
+
+    if dry_run:
+        for source in ANALYZER_SOURCES:
+            source_dir = base / source
+            if not source_dir.exists():
+                continue
+            for src in source_dir.rglob("*.json"):
+                rel = src.relative_to(source_dir)
+                marker = "override" if source == "distro" and (base / "core" / rel).exists() else "add"
+                typer.echo(f"  [{source}/{rel}] -> .active/{rel} ({marker})")
+                if source == "distro" and (base / "core" / rel).exists():
+                    overridden += 1
+                else:
+                    copied += 1
+        return copied, overridden
+
+    if active.exists():
+        shutil.rmtree(active)
+    active.mkdir(parents=True)
+    for source in ANALYZER_SOURCES:
+        source_dir = base / source
+        if not source_dir.exists():
+            continue
+        for src in source_dir.rglob("*.json"):
+            rel = src.relative_to(source_dir)
+            dest = active / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                overridden += 1
+            else:
+                copied += 1
+            shutil.copy2(src, dest)
+    return copied, overridden
+
+
 def _check_known_bad_secrets(
     root: Path, prod: bool
 ) -> tuple[list[str], list[str]]:
@@ -153,6 +215,8 @@ def _run_doctor(prod: bool) -> None:
     failures.extend(secret_failures)
     warnings.extend(secret_warnings)
 
+    warnings.extend(_check_analyzer_profile_overrides(root))
+
     for warning in warnings:
         typer.echo(f"WARN: {warning}")
 
@@ -207,13 +271,20 @@ def apply(
     ):
         typer.echo(f"  {key}: {values.get(key)}")
 
+    typer.echo("Analyzer profile merge plan:")
     if check or dry_run:
+        _merge_analyzer_profiles(repo_root(), dry_run=True)
         typer.echo("No files written.")
         return
 
     # Production writes will be expanded surface-by-surface with diff previews.
     (repo_root() / ".context.yml").write_text(yaml.safe_dump(values), encoding="utf-8")
     typer.echo("Wrote .context.yml")
+    copied, overridden = _merge_analyzer_profiles(repo_root(), dry_run=False)
+    typer.echo(
+        f"Merged analyzer profiles to {ANALYZER_PROFILES_DIR}/{ANALYZER_ACTIVE}/ "
+        f"({copied} active, {overridden} overridden by distro/)"
+    )
 
 
 if __name__ == "__main__":
