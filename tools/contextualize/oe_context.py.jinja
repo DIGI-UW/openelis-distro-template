@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,37 @@ def load_profile(profile: str) -> dict[str, Any]:
     return load_yaml(repo_root() / "context" / "profiles" / profile / "context.yml")
 
 
+def _git(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _is_git_repo(root: Path) -> bool:
+    return _git("rev-parse", "--is-inside-work-tree", cwd=root).returncode == 0
+
+
+def _check_env_safety(root: Path) -> list[str]:
+    # `.env` is documented as a step in the quickstart (`cp .env.example .env`),
+    # so its mere existence is fine. What's NOT fine is `.env` slipping into
+    # version control: ignored-but-tracked, or simply not ignored at all.
+    env_file = root / ".env"
+    if not env_file.exists():
+        return []
+    if not _is_git_repo(root):
+        return []
+    failures: list[str] = []
+    if _git("ls-files", "--error-unmatch", ".env", cwd=root).returncode == 0:
+        failures.append(".env is tracked by git; remove from index and add to .gitignore")
+    if _git("check-ignore", "-q", ".env", cwd=root).returncode != 0:
+        failures.append(".env exists but is not matched by .gitignore")
+    return failures
+
+
 @app.command()
 def doctor() -> None:
     """Check manifest, docs, and file consistency."""
@@ -48,8 +80,7 @@ def doctor() -> None:
         if surface_id not in docs_text:
             failures.append(f"{surface_id}: missing docs reference")
 
-    if (root / ".env").exists():
-        failures.append(".env exists; keep local secrets untracked")
+    failures.extend(_check_env_safety(root))
 
     if failures:
         for failure in failures:
