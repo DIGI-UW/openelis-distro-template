@@ -2,12 +2,14 @@
 
 # Releases are driven by manual workflow_dispatch — the maintainer supplies
 # the distro version, OE version, and bridge version up front. The workflow
-# refreshes image digests in docker-compose.yml, validates that pins are
-# release-shaped, then tags the result and publishes a GitHub Release.
+# rewrites image tags in docker-compose.yml to the requested upstream
+# versions, validates that pins are release-shaped, then tags the result
+# and publishes a GitHub Release.
 #
-# docker-compose.yml carries literal `repo:tag@sha256:digest` image references on
-# every commit (including main), so a release tag is just a tag of the
-# canonical-state tree — no env-var substitution, no rewriting required.
+# Note: pin-versions.sh rewrites `repo:tag` only — it does not append
+# `@sha256:digest`. Tags like `3.2.1.6` are treated as fixed releases by
+# upstream convention. Operators who want cryptographic immutability can
+# resolve digests at deploy time as a separate hardening step.
 #
 # Pushes to main produce a 90-day workflow artifact for inspection but never
 # tag or publish a Release.
@@ -108,8 +110,11 @@ jobs:
             echo "ERROR: tag '${DISTRO_VERSION}' already exists locally." >&2
             exit 1
           fi
-          # Highest-versioned existing tag is treated as "previous" for diff purposes.
-          PREV_TAG="$(git tag --list --sort=-v:refname | head -n 1 || true)"
+          # Highest-versioned tag reachable from the checked-out base_ref is
+          # treated as "previous" for diff purposes. Using --merged HEAD
+          # (instead of the global tag list) avoids picking a newer tag on
+          # an unrelated branch when releasing from an older base_ref.
+          PREV_TAG="$(git tag --list --merged HEAD --sort=-v:refname | head -n 1 || true)"
           echo "value=${PREV_TAG}" >> "$GITHUB_OUTPUT"
           echo "Previous distro tag: ${PREV_TAG:-<none>}"
 
@@ -133,10 +138,10 @@ jobs:
             OpenELIS Global: ${OE_VERSION_INPUT}
             Analyzer Bridge:  ${BRIDGE_VERSION_INPUT}
 
-            Refreshed image digests in docker-compose.yml at release time. This
+            Refreshed image pins in docker-compose.yml at release time. This
             commit is reachable only via the ${DISTRO_VERSION} tag."
           else
-            echo "No digest changes since ${BASE_REF}; tagging existing HEAD."
+            echo "No pin changes since ${BASE_REF}; tagging existing HEAD."
           fi
           git tag -a "${DISTRO_VERSION}" -m "Release ${DISTRO_VERSION}"
           git push origin "refs/tags/${DISTRO_VERSION}"

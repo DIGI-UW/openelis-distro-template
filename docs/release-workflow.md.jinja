@@ -1,10 +1,12 @@
 # Release Workflow
 
 Each generated distro ships with a manual-dispatch GitHub Actions workflow
-that tags a release, refreshes image digests, and publishes a GitHub
-Release with consolidated upstream notes. Releases are immutable artifacts
-of the canonical-state tree at the tagged commit — no env-var
-substitution, no rewriting at deploy time.
+that tags a release, rewrites image-tag pins, and publishes a GitHub
+Release with consolidated upstream notes. Releases are artifacts of the
+canonical-state tree at the tagged commit — no env-var substitution, no
+rewriting at deploy time. (The `pin-versions.sh` script rewrites
+`repo:tag` without appending `@sha256:digest`; cryptographic immutability
+is a future hardening step, not the current shipping default.)
 
 ## Cutting a release
 
@@ -35,14 +37,15 @@ gh workflow run release.yml \
 
 1. **Validates inputs.** Refuses if `distro_version` is not semver-shaped
    or if a tag with that name already exists on origin.
-2. **Refreshes image pins.** Runs `./scripts/pin-versions.sh
-   $OE_VERSION $BRIDGE_VERSION`, which rewrites the `image:` lines in
-   `docker-compose.yml`.
+2. **Refreshes image-tag pins.** Runs `./scripts/pin-versions.sh
+   $OE_VERSION $BRIDGE_VERSION`, which rewrites the `repo:tag` portion
+   of every `image:` line in `docker-compose.yml`. Does not append
+   `@sha256:digest` — see the note in the overview.
 3. **Validates pin shape.** Unless `allow_develop_pins=true`, runs
    `./scripts/check-release-pins.sh`. Fails if any pin resolves to
    `:develop`, `:latest`, `:main`, `:master`, `:nightly`, or an empty
    tag.
-4. **Commits the digest refresh, tags, and pushes.** Commit message
+4. **Commits the pin refresh, tags, and pushes.** Commit message
    names the distro/OE/bridge versions. The commit is reachable only
    via the new tag (`base_ref` does not move).
 5. **Builds the tarball.** `./scripts/build-tarball.sh

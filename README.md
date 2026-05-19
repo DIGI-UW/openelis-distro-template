@@ -19,7 +19,10 @@ gate flags anything that still looks demo-quality before you ship.
 pipx install copier      # or: pip install --user copier
 
 # 2. Generate a distro. Press Enter at every prompt to accept defaults.
-copier copy gh:DIGI-UW/openelis-distro-template my-distro
+#    --trust is required: this template runs post-generate tasks that
+#    materialize per-distro random secrets and merge the analyzer-profile
+#    tree. Without --trust, copier prompts before running them.
+copier copy --trust gh:DIGI-UW/openelis-distro-template my-distro
 
 # 3. Boot it.
 cd my-distro

@@ -43,10 +43,13 @@ python3 tools/contextualize/oe_context.py apply
 warns (not fails) when a filename appears in both layers, so you can see
 which distro overrides are active.
 
-On a fresh `copier copy`, the post-generate task materializes `.active/`
-automatically — the demo stack boots with the upstream profile set without
-any manual step. After that, the operator runs `apply` whenever they
-change profile files.
+On a fresh `copier copy --trust`, the post-generate task materializes
+`.active/` automatically — the demo stack boots with the upstream profile
+set without any manual step. (The task only runs when the template is
+trusted; if you generated with plain `copier copy` and declined the trust
+prompt, run `oe_context.py apply` once to populate `.active/` before
+`docker compose up`.) After that, the operator runs `apply` whenever
+profile files change.
 
 ## Adding a distro profile
 
