@@ -33,4 +33,5 @@ jobs:
           python tools/contextualize/oe_context.py apply --profile demo --non-interactive --dry-run
           python tools/contextualize/oe_context.py apply --profile demo --non-interactive
           test -d configs/analyzer-profiles/.active/hl7
+          cp .env.example .env
           docker compose config
