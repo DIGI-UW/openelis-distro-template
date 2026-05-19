@@ -1,7 +1,7 @@
-context_slug: {{ context_slug }}
-context_name: {{ context_name }}
-project_name: {{ project_name }}
-timezone: {{ timezone }}
-default_nationality: {{ default_nationality }}
-facility_id: {{ facility_id }}
-public_hostname: {{ public_hostname }}
+context_slug: {{ context_slug | tojson }}
+context_name: {{ context_name | tojson }}
+project_name: {{ project_name | tojson }}
+timezone: {{ timezone | tojson }}
+default_nationality: {{ default_nationality | tojson }}
+facility_id: {{ facility_id | tojson }}
+public_hostname: {{ public_hostname | tojson }}
