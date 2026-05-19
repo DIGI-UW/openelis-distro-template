@@ -6,6 +6,15 @@ _exclude:
   - copier.yml
   - .github
   - scripts
+  - tools/copier_tasks
+
+# .env.example carries generated secrets after `copier copy`; never overwrite
+# on `copier update` (would silently rotate the operator's stored values).
+_skip_if_exists:
+  - .env.example
+
+_tasks:
+  - ["python3", "{{ _copier_conf.src_path }}/tools/copier_tasks/generate_secrets.py"]
 
 context_slug:
   type: str

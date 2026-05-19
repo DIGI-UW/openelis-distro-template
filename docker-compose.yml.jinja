@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: clinlims
       POSTGRES_USER: clinlims
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (cp .env.example .env to use the copier-generated default)}
       TZ: "{{ timezone }}"
     volumes:
       - ./configs/database/data:/var/lib/postgresql/data
