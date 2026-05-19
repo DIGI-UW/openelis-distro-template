@@ -20,7 +20,21 @@ Set `project_name` and `context_name` to the public-facing deployment identity.
 
 Surface id: `env_defaults`.
 
-Copy `.env.example` to `.env`, then replace generated secrets and ports.
+Copy `.env.example` to `.env`. Both files ship with secrets generated at
+`copier copy` time, so the demo stack boots without further edits. Before
+going to production, rotate the generated secrets in `.env` and confirm
+with the pre-production gate:
+
+```bash
+python3 tools/contextualize/oe_context.py doctor --prod
+```
+
+`doctor --prod` fails if `POSTGRES_PASSWORD` or `FHIRSTORE_PASSWORD` in
+`.env` still match the value in `.env.example`, or if any
+known-bad value (the upstream `adminADMIN!`, the literal `change-me`,
+the `__GENERATED_SECRET__` sentinel) is present. The default
+`doctor` (no `--prod`) only warns on unrotated demo values so the
+quickstart stays a clean green.
 
 ## System Properties
 

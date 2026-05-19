@@ -3,5 +3,7 @@ org.openelisglobal.country={{ context_name }}
 org.openelisglobal.state=
 org.openelisglobal.district=
 
-# Demo default only. Override in deployment-specific secret management.
-org.openelisglobal.fhirstore.password=adminADMIN!
+# Sourced from the FHIRSTORE_PASSWORD env var (set in .env, passed through
+# docker-compose to the oe.openelis.org container). Rotate by editing .env
+# and restarting the container — never write the literal value here.
+org.openelisglobal.fhirstore.password=${FHIRSTORE_PASSWORD}

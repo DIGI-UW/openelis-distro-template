@@ -64,13 +64,80 @@ def _check_env_safety(root: Path) -> list[str]:
     return failures
 
 
-@app.command()
-def doctor() -> None:
-    """Check manifest, docs, and file consistency."""
+# Values that must never reach production for any of SECRET_VARS. Includes the
+# upstream OE default ("adminADMIN!"), the PR #1 placeholders ("change-me",
+# "demo-password"), the empty string, and the copier sentinel
+# ("__GENERATED_SECRET__") that would mean the post-generate task never ran.
+KNOWN_BAD_SECRETS = frozenset(
+    {"change-me", "demo-password", "adminADMIN!", "", "__GENERATED_SECRET__"}
+)
+SECRET_VARS = ("POSTGRES_PASSWORD", "FHIRSTORE_PASSWORD")
+
+
+def _parse_env(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _check_known_bad_secrets(
+    root: Path, prod: bool
+) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
+    warnings: list[str] = []
+
+    properties = root / "configs" / "properties" / "common.properties"
+    if properties.exists() and "adminADMIN!" in properties.read_text(encoding="utf-8"):
+        failures.append(
+            "configs/properties/common.properties contains 'adminADMIN!'; "
+            "use ${FHIRSTORE_PASSWORD} and rotate via .env"
+        )
+
+    env_values = _parse_env(root / ".env")
+    example_values = _parse_env(root / ".env.example")
+
+    for var in SECRET_VARS:
+        value = env_values.get(var)
+        if value is None:
+            continue
+        if value in KNOWN_BAD_SECRETS:
+            failures.append(f".env has {var} set to a known-bad value; rotate")
+
+    unrotated = [
+        var
+        for var in SECRET_VARS
+        if var in env_values
+        and var in example_values
+        and env_values[var] == example_values[var]
+    ]
+    if unrotated:
+        msg = ", ".join(unrotated)
+        if prod:
+            failures.append(
+                f".env still uses .env.example values for: {msg}; rotate before production"
+            )
+        else:
+            warnings.append(
+                f".env still uses .env.example values for: {msg} "
+                "(fine for demo; rotate before going to production — see doctor --prod)"
+            )
+
+    return failures, warnings
+
+
+def _run_doctor(prod: bool) -> None:
     root = repo_root()
     contextualization = root / "docs" / "contextualization.md"
     docs_text = contextualization.read_text(encoding="utf-8") if contextualization.exists() else ""
     failures: list[str] = []
+    warnings: list[str] = []
 
     for surface in surfaces():
         surface_id = surface["id"]
@@ -82,12 +149,31 @@ def doctor() -> None:
 
     failures.extend(_check_env_safety(root))
 
+    secret_failures, secret_warnings = _check_known_bad_secrets(root, prod)
+    failures.extend(secret_failures)
+    warnings.extend(secret_warnings)
+
+    for warning in warnings:
+        typer.echo(f"WARN: {warning}")
+
     if failures:
         for failure in failures:
             typer.echo(f"FAIL: {failure}")
         raise typer.Exit(code=1)
 
     typer.echo("OK: config surfaces, docs, and files are consistent.")
+
+
+@app.command()
+def doctor(
+    prod: bool = typer.Option(
+        False,
+        "--prod",
+        help="Pre-production gate: also fail if secrets in .env still match .env.example.",
+    ),
+) -> None:
+    """Check manifest, docs, and file consistency."""
+    _run_doctor(prod=prod)
 
 
 @app.command()
@@ -98,7 +184,7 @@ def apply(
     non_interactive: bool = typer.Option(False, help="Use profile values without prompts."),
 ) -> None:
     """Apply or preview context values."""
-    doctor()
+    _run_doctor(prod=False)
     values = load_profile(profile)
 
     if not non_interactive and not check:

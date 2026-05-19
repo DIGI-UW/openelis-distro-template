@@ -18,6 +18,7 @@ services:
       TZ: "{{ timezone }}"
       OPENELIS_CONFIGURATION_INSTANCE_ID: "{{ context_slug }}"
       DEFAULT_NATIONALITY: "{{ default_nationality }}"
+      FHIRSTORE_PASSWORD: ${FHIRSTORE_PASSWORD:?FHIRSTORE_PASSWORD must be set in .env (cp .env.example .env to use the copier-generated default)}
     volumes:
       - ./configs/properties:/run/configs/properties:ro
       - ./configs/configuration/backend:/run/configs/configuration/backend:ro
