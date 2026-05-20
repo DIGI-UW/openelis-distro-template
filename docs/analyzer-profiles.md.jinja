@@ -1,5 +1,65 @@
 # Analyzer Profiles
 
-The template ships generic vendor profiles only. Country-specific test-code
-mappings should be added in generated country repositories as payload, not in the
-base template.
+This distro reads its analyzer profiles from a two-layer tree under
+`configs/analyzer-profiles/`. At runtime, Docker Compose mounts a merged
+view that the contextualization CLI materializes from the two layers.
+
+## Layout
+
+```
+configs/analyzer-profiles/
+├── core/                  # upstream-managed defaults (committed)
+│   ├── astm/
+│   ├── file/
+│   └── hl7/
+├── distro/                # distro-specific overrides + additions (committed)
+│   ├── astm/
+│   ├── file/
+│   └── hl7/
+└── .active/               # materialized merged view (gitignored)
+```
+
+- **`core/`** holds the canonical, upstream-validated profiles. Currently
+  vendored into the template; a future standalone
+  `openelis-analyzer-profiles` repo will become the authoritative source,
+  refreshed via `tools/contextualize/sync_analyzer_profiles.py`. Do not edit
+  files in `core/` by hand — your changes will be lost when the next sync
+  pulls upstream.
+- **`distro/`** holds the profiles your deployment owns: overrides of upstream
+  defaults (drop a file with the same path as a `core/` file) and additions
+  (drop a file with a new name). Filename collision: `distro/` wins.
+- **`.active/`** is the merged tree the OpenELIS container reads from. Never
+  edit it directly. It is rebuilt by every `oe_context.py apply`.
+
+## Workflow
+
+After editing anything under `core/` or `distro/`:
+
+```bash
+python3 tools/contextualize/oe_context.py apply
+```
+
+`apply` rewrites `.active/` from `core/` overlaid by `distro/`. `doctor`
+warns (not fails) when a filename appears in both layers, so you can see
+which distro overrides are active.
+
+On a fresh `copier copy --trust`, the post-generate task materializes
+`.active/` automatically — the demo stack boots with the upstream profile
+set without any manual step. (The task only runs when the template is
+trusted; if you generated with plain `copier copy` and declined the trust
+prompt, run `oe_context.py apply` once to populate `.active/` before
+`docker compose up`.) After that, the operator runs `apply` whenever
+profile files change.
+
+## Adding a distro profile
+
+1. Drop the JSON file at `configs/analyzer-profiles/distro/<protocol>/<name>.json`
+   (where `<protocol>` is `astm`, `file`, or `hl7`).
+2. Run `python3 tools/contextualize/oe_context.py apply` to refresh `.active/`.
+3. `docker compose restart oe.openelis.org` to make OE re-read the mount.
+
+## Overriding a core profile
+
+Same workflow as adding, but use the exact same `<protocol>/<name>.json`
+path as the file under `core/` you want to override. `doctor` will warn
+that the override is in effect.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,10 @@ import typer
 import yaml
 
 app = typer.Typer(help="Contextualize this OpenELIS distro.")
+
+ANALYZER_PROFILES_DIR = "configs/analyzer-profiles"
+ANALYZER_SOURCES = ("core", "distro")
+ANALYZER_ACTIVE = ".active"
 
 
 def repo_root() -> Path:
@@ -32,13 +38,174 @@ def load_profile(profile: str) -> dict[str, Any]:
     return load_yaml(repo_root() / "context" / "profiles" / profile / "context.yml")
 
 
-@app.command()
-def doctor() -> None:
-    """Check manifest, docs, and file consistency."""
+def _git(*args: str, cwd: Path) -> subprocess.CompletedProcess[str] | None:
+    # Returns None when git itself isn't installed — lets doctor run from
+    # a tarball-extracted distro on a minimal host without crashing.
+    try:
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+
+
+def _is_git_repo(root: Path) -> bool:
+    result = _git("rev-parse", "--is-inside-work-tree", cwd=root)
+    return result is not None and result.returncode == 0
+
+
+def _check_env_safety(root: Path) -> list[str]:
+    # `.env` is documented as a step in the quickstart (`cp .env.example .env`),
+    # so its mere existence is fine. What's NOT fine is `.env` slipping into
+    # version control: ignored-but-tracked, or simply not ignored at all.
+    env_file = root / ".env"
+    if not env_file.exists():
+        return []
+    if not _is_git_repo(root):
+        return []
+    failures: list[str] = []
+    if _git("ls-files", "--error-unmatch", ".env", cwd=root).returncode == 0:
+        failures.append(".env is tracked by git; remove from index and add to .gitignore")
+    if _git("check-ignore", "-q", ".env", cwd=root).returncode != 0:
+        failures.append(".env exists but is not matched by .gitignore")
+    return failures
+
+
+# Values that must never reach production for any of SECRET_VARS. Includes the
+# upstream OE default ("adminADMIN!"), the PR #1 placeholders ("change-me",
+# "demo-password"), the empty string, and the copier sentinel
+# ("__GENERATED_SECRET__") that would mean the post-generate task never ran.
+KNOWN_BAD_SECRETS = frozenset(
+    {"change-me", "demo-password", "adminADMIN!", "", "__GENERATED_SECRET__"}
+)
+SECRET_VARS = ("POSTGRES_PASSWORD", "FHIRSTORE_PASSWORD")
+
+
+def _parse_env(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        values[key.strip()] = value.strip()
+    return values
+
+
+def _check_analyzer_profile_overrides(root: Path) -> list[str]:
+    # Surface filename collisions between core/ and distro/ so the operator
+    # knows they're overriding intentionally. Never a failure — overrides
+    # are the supported workflow.
+    warnings: list[str] = []
+    base = root / ANALYZER_PROFILES_DIR
+    core_dir = base / "core"
+    distro_dir = base / "distro"
+    if not (core_dir.exists() and distro_dir.exists()):
+        return warnings
+    for distro_file in distro_dir.rglob("*.json"):
+        rel = distro_file.relative_to(distro_dir)
+        if (core_dir / rel).exists():
+            warnings.append(f"analyzer profile {rel} overrides core/")
+    return warnings
+
+
+def _merge_analyzer_profiles(root: Path, dry_run: bool = False) -> tuple[int, int]:
+    base = root / ANALYZER_PROFILES_DIR
+    active = base / ANALYZER_ACTIVE
+    copied = 0
+    overridden = 0
+
+    if dry_run:
+        for source in ANALYZER_SOURCES:
+            source_dir = base / source
+            if not source_dir.exists():
+                continue
+            for src in source_dir.rglob("*.json"):
+                rel = src.relative_to(source_dir)
+                marker = "override" if source == "distro" and (base / "core" / rel).exists() else "add"
+                typer.echo(f"  [{source}/{rel}] -> .active/{rel} ({marker})")
+                if source == "distro" and (base / "core" / rel).exists():
+                    overridden += 1
+                else:
+                    copied += 1
+        return copied, overridden
+
+    if active.exists():
+        shutil.rmtree(active)
+    active.mkdir(parents=True)
+    for source in ANALYZER_SOURCES:
+        source_dir = base / source
+        if not source_dir.exists():
+            continue
+        for src in source_dir.rglob("*.json"):
+            rel = src.relative_to(source_dir)
+            dest = active / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                overridden += 1
+            else:
+                copied += 1
+            shutil.copy2(src, dest)
+    return copied, overridden
+
+
+def _check_known_bad_secrets(
+    root: Path, prod: bool
+) -> tuple[list[str], list[str]]:
+    failures: list[str] = []
+    warnings: list[str] = []
+
+    properties = root / "configs" / "properties" / "common.properties"
+    if properties.exists() and "adminADMIN!" in properties.read_text(encoding="utf-8"):
+        failures.append(
+            "configs/properties/common.properties contains 'adminADMIN!'; "
+            "use ${FHIRSTORE_PASSWORD} and rotate via .env"
+        )
+
+    env_values = _parse_env(root / ".env")
+    example_values = _parse_env(root / ".env.example")
+
+    for var in SECRET_VARS:
+        value = env_values.get(var)
+        if value is None:
+            continue
+        if value in KNOWN_BAD_SECRETS:
+            failures.append(f".env has {var} set to a known-bad value; rotate")
+
+    unrotated = [
+        var
+        for var in SECRET_VARS
+        if var in env_values
+        and var in example_values
+        and env_values[var] == example_values[var]
+    ]
+    if unrotated:
+        msg = ", ".join(unrotated)
+        if prod:
+            failures.append(
+                f".env still uses .env.example values for: {msg}; rotate before production"
+            )
+        else:
+            warnings.append(
+                f".env still uses .env.example values for: {msg} "
+                "(fine for demo; rotate before going to production — see doctor --prod)"
+            )
+
+    return failures, warnings
+
+
+def _run_doctor(prod: bool) -> None:
     root = repo_root()
     contextualization = root / "docs" / "contextualization.md"
     docs_text = contextualization.read_text(encoding="utf-8") if contextualization.exists() else ""
     failures: list[str] = []
+    warnings: list[str] = []
 
     for surface in surfaces():
         surface_id = surface["id"]
@@ -48,8 +215,16 @@ def doctor() -> None:
         if surface_id not in docs_text:
             failures.append(f"{surface_id}: missing docs reference")
 
-    if (root / ".env").exists():
-        failures.append(".env exists; keep local secrets untracked")
+    failures.extend(_check_env_safety(root))
+
+    secret_failures, secret_warnings = _check_known_bad_secrets(root, prod)
+    failures.extend(secret_failures)
+    warnings.extend(secret_warnings)
+
+    warnings.extend(_check_analyzer_profile_overrides(root))
+
+    for warning in warnings:
+        typer.echo(f"WARN: {warning}")
 
     if failures:
         for failure in failures:
@@ -60,6 +235,18 @@ def doctor() -> None:
 
 
 @app.command()
+def doctor(
+    prod: bool = typer.Option(
+        False,
+        "--prod",
+        help="Pre-production gate: also fail if secrets in .env still match .env.example.",
+    ),
+) -> None:
+    """Check manifest, docs, and file consistency."""
+    _run_doctor(prod=prod)
+
+
+@app.command()
 def apply(
     profile: str = typer.Option("demo", help="Context profile to apply."),
     dry_run: bool = typer.Option(False, help="Print intended changes without writing."),
@@ -67,7 +254,7 @@ def apply(
     non_interactive: bool = typer.Option(False, help="Use profile values without prompts."),
 ) -> None:
     """Apply or preview context values."""
-    doctor()
+    _run_doctor(prod=False)
     values = load_profile(profile)
 
     if not non_interactive and not check:
@@ -90,13 +277,20 @@ def apply(
     ):
         typer.echo(f"  {key}: {values.get(key)}")
 
+    typer.echo("Analyzer profile merge plan:")
     if check or dry_run:
+        _merge_analyzer_profiles(repo_root(), dry_run=True)
         typer.echo("No files written.")
         return
 
     # Production writes will be expanded surface-by-surface with diff previews.
     (repo_root() / ".context.yml").write_text(yaml.safe_dump(values), encoding="utf-8")
     typer.echo("Wrote .context.yml")
+    copied, overridden = _merge_analyzer_profiles(repo_root(), dry_run=False)
+    typer.echo(
+        f"Merged analyzer profiles to {ANALYZER_PROFILES_DIR}/{ANALYZER_ACTIVE}/ "
+        f"({copied} active, {overridden} overridden by distro/)"
+    )
 
 
 if __name__ == "__main__":

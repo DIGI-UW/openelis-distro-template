@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""Refresh configs/analyzer-profiles/core/ from the upstream profiles repo.
+
+Skeleton. The intended behavior:
+
+  1. Read the pinned upstream version from a future Copier var
+     (default: a tagged release of `DIGI-UW/openelis-analyzer-profiles`,
+     to be split out from this template).
+  2. Download or shallow-clone that ref into a temp dir.
+  3. Refuse to overwrite if `configs/analyzer-profiles/core/` has
+     uncommitted local changes (operator must commit or stash first).
+  4. Replace the contents of `configs/analyzer-profiles/core/` with the
+     upstream payload. `configs/analyzer-profiles/distro/` is untouched.
+  5. Suggest running `python3 tools/contextualize/oe_context.py apply`
+     to materialize the merged set into `.active/`.
+
+Until the upstream repo exists, this command is a stub that prints
+guidance and exits non-zero so an operator who runs it doesn't silently
+think they pulled fresh profiles when they didn't.
+"""
+from __future__ import annotations
+
+import sys
+
+
+def main() -> int:
+    sys.stderr.write(
+        "sync_analyzer_profiles is not yet implemented.\n"
+        "The upstream openelis-analyzer-profiles repo has not been "
+        "stood up yet. For now, profiles in configs/analyzer-profiles/core/ "
+        "are vendored into this template directly. Add distro-specific "
+        "profiles to configs/analyzer-profiles/distro/ and run\n"
+        "  python3 tools/contextualize/oe_context.py apply\n"
+        "to materialize the merged set.\n"
+    )
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

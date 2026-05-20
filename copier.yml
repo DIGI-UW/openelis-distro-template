@@ -4,8 +4,24 @@ _exclude:
   - .git
   - .venv
   - copier.yml
-  - .github
-  - scripts
+  # Template-side documentation, for the person creating a new distro.
+  # Generated distros get their own README.md.jinja-rendered README.
+  - CREATING-A-DISTRO.md
+  # Template repo's own CI (exercises copier copy on every PR) — not for
+  # generated distros. The release workflow added by C8 is .jinja-suffixed
+  # and ships normally.
+  - .github/workflows/pr.yml
+  # Build-time-only post-generate tasks, run from the template source.
+  - tools/copier_tasks
+
+# .env.example carries generated secrets after `copier copy`; never overwrite
+# on `copier update` (would silently rotate the operator's stored values).
+_skip_if_exists:
+  - .env.example
+
+_tasks:
+  - ["python3", "{{ _copier_conf.src_path }}/tools/copier_tasks/generate_secrets.py"]
+  - ["python3", "{{ _copier_conf.src_path }}/tools/copier_tasks/merge_profiles.py"]
 
 context_slug:
   type: str
@@ -41,3 +57,8 @@ public_hostname:
   type: str
   default: demo.openelis.example.org
   help: Example production hostname for TLS documentation and .env defaults.
+
+tarball_basename:
+  type: str
+  default: openelis-{{ context_slug }}-distro
+  help: Basename for release tarballs (e.g. <basename>-3.2.2.0.tar.gz).

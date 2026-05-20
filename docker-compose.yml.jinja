@@ -4,10 +4,12 @@ services:
     environment:
       POSTGRES_DB: clinlims
       POSTGRES_USER: clinlims
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-demo-password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env (cp .env.example .env to use the copier-generated default)}
       TZ: "{{ timezone }}"
     volumes:
       - ./configs/database/data:/var/lib/postgresql/data
+    networks:
+      - openelis-network
 
   oe.openelis.org:
     image: ${OE_IMAGE:-itechuw/openelis-global-2:develop}
@@ -18,12 +20,18 @@ services:
       TZ: "{{ timezone }}"
       OPENELIS_CONFIGURATION_INSTANCE_ID: "{{ context_slug }}"
       DEFAULT_NATIONALITY: "{{ default_nationality }}"
+      FHIRSTORE_PASSWORD: ${FHIRSTORE_PASSWORD:?FHIRSTORE_PASSWORD must be set in .env (cp .env.example .env to use the copier-generated default)}
     volumes:
       - ./configs/properties:/run/configs/properties:ro
       - ./configs/configuration/backend:/run/configs/configuration/backend:ro
-      - ./configs/analyzer-profiles:/run/configs/analyzer-profiles:ro
+      # Populated by `python3 tools/contextualize/oe_context.py apply` (or
+      # by the copier post-generate task on initial render) from
+      # configs/analyzer-profiles/{core,distro}/.
+      - ./configs/analyzer-profiles/.active:/run/configs/analyzer-profiles:ro
     ports:
       - "${OPENELIS_HTTP_PORT:-8080}:8080"
+    networks:
+      - openelis-network
 
   frontend.openelis.org:
     image: ${FRONTEND_IMAGE:-itechuw/openelis-global-2-frontend:develop}
@@ -31,11 +39,15 @@ services:
       - oe.openelis.org
     environment:
       TZ: "{{ timezone }}"
+    networks:
+      - openelis-network
 
   fhir.openelis.org:
     image: ${FHIR_IMAGE:-itechuw/openelis-global-2-fhir:develop}
     environment:
       TZ: "{{ timezone }}"
+    networks:
+      - openelis-network
 
   openelis-analyzer-bridge:
     image: ${BRIDGE_IMAGE:-itechuw/openelis-analyzer-bridge:develop}
@@ -46,6 +58,8 @@ services:
       ORG_ITECH_AHB_FORWARD_HTTP_SERVER_URI: https://oe.openelis.org:8443/OpenELIS-Global/analyzer
     ports:
       - "${ANALYZER_BRIDGE_PORT:-8442}:8443"
+    networks:
+      - openelis-network
 
   proxy:
     image: ${PROXY_IMAGE:-itechuw/openelis-global-2-proxy:develop}
@@ -54,6 +68,8 @@ services:
       - frontend.openelis.org
     ports:
       - "${OPENELIS_PROXY_PORT:-80}:80"
+    networks:
+      - openelis-network
 
 networks:
   openelis-network:
