@@ -12,40 +12,70 @@ image versions, add distro-specific analyzer profiles, and replace the demo
 facility identity with your deployment's. The `oe_context.py doctor --prod`
 gate flags anything that still looks demo-quality before you ship.
 
-**For a guided walkthrough** of creating a country/site distro,
-including a phase-by-phase checklist and a worked PNG example, see
-[CREATING-A-DISTRO.md](CREATING-A-DISTRO.md).
+**Guided walkthrough** with a phase-by-phase checklist and a worked PNG
+example: see [CREATING-A-DISTRO.md](CREATING-A-DISTRO.md).
 
-## Create a new distro in 60 seconds
+## Create a new distro
+
+1. **Click "Use this template" → "Create a new repository"** at the top
+   of this GitHub repo. Name the new repo (e.g. `openelis-png-distro`)
+   and create it.
+
+2. **Clone your new repo** and run the init script:
+   ```bash
+   git clone git@github.com:<your-org>/openelis-png-distro.git
+   cd openelis-png-distro
+   ./scripts/init.sh
+   ```
+   The script prompts for distro identity (slug, country name, timezone,
+   facility ID, hostname), renders the template against your answers,
+   generates per-distro random secrets, merges the analyzer-profile tree,
+   and removes the template-only scaffolding. Press Enter at every prompt
+   to accept demo defaults.
+
+   For scripted setup (e.g. `openelis-png-distro`):
+   ```bash
+   ./scripts/init.sh \
+       --data context_slug=png \
+       --data 'context_name=Papua New Guinea' \
+       --data 'project_name=OpenELIS PNG Distro' \
+       --data 'timezone=Pacific/Port_Moresby' \
+       --data 'default_nationality=PNG' \
+       --data 'facility_id=png-default' \
+       --data 'public_hostname=openelis.health.gov.pg' \
+       --defaults
+   ```
+
+3. **Boot the demo stack:**
+   ```bash
+   cp .env.example .env
+   docker compose up -d
+   open http://localhost:8080/OpenELIS-Global/      # macOS
+   ```
+
+4. **Commit the initialized state:**
+   ```bash
+   git add -A
+   git commit -m "chore: initialize from openelis-distro-template"
+   git push
+   ```
+
+After step 2 the repo is no longer a template — it's a self-contained
+distro you customize further (rotate secrets before production,
+add distro-specific analyzer profiles in `configs/analyzer-profiles/distro/`,
+etc.). The walkthrough in [CREATING-A-DISTRO.md](CREATING-A-DISTRO.md)
+covers the customization phases.
+
+### Alternative: run Copier directly
+
+If you'd rather skip the GitHub UI:
 
 ```bash
-# 1. Install Copier (one-time setup).
-pipx install copier      # or: pip install --user copier
-
-# 2. Generate a distro. Press Enter at every prompt to accept defaults.
-#    --trust is required: this template runs post-generate tasks that
-#    materialize per-distro random secrets and merge the analyzer-profile
-#    tree. Without --trust, copier prompts before running them.
-copier copy --trust gh:DIGI-UW/openelis-distro-template my-distro
-
-# 3. Boot it.
-cd my-distro
-cp .env.example .env
-docker compose up -d
-
-# 4. Open OpenELIS.
-open http://localhost:8080/OpenELIS-Global/      # macOS
-# xdg-open http://localhost:8080/OpenELIS-Global # Linux
-
-# 5. Confirm the contextualization state.
-python3 tools/contextualize/oe_context.py doctor
+pipx install copier
+copier copy --trust gh:DIGI-UW/openelis-distro-template openelis-png-distro
 ```
 
-That's the whole loop. The first `copier copy` generates per-distro random
-values for `POSTGRES_PASSWORD` and `FHIRSTORE_PASSWORD` (no shared
-`demo-password` across distros), drops the curated analyzer profiles into
-`configs/analyzer-profiles/core/`, and renders the Docker Compose stack with
-demo facility metadata.
+Same result as the button + `init.sh` flow.
 
 ## What the defaults give you
 
