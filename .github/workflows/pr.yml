@@ -1,37 +1,64 @@
 name: Template PR
 
+# Simulates the "Use this template" flow: copies the checkout to a fresh
+# directory (no git history, like the new repo GitHub creates), runs
+# ./scripts/init.sh, and verifies the resulting distro boots-by-default.
+
 on:
   pull_request:
   push:
     branches: [main]
 
 jobs:
-  generate-demo:
+  init-and-validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install tooling
+
+      - name: Install copier + runtime deps
         run: pip install copier typer questionary pyyaml
-      - name: Generate demo distro
+
+      - name: Simulate "Use this template" — clone to a fresh path
         run: |
-          copier copy --trust --defaults \
-            --data context_slug=demo \
-            --data context_name='Demo Country' \
-            --data project_name='OpenELIS Demo Distro' \
-            --data timezone=UTC \
-            --data default_nationality=Demo \
-            --data facility_id=demo-facility \
-            --data public_hostname=demo.openelis.example.org \
-            . generated/demo-distro
-      - name: Validate generated distro
-        working-directory: generated/demo-distro
+          # GitHub's "Use this template" creates a new repo with the source
+          # files but no git history. Mirror that with a plain copy.
+          mkdir -p /tmp/openelis-demo-distro
+          cp -R . /tmp/openelis-demo-distro/
+          rm -rf /tmp/openelis-demo-distro/.git
+          # Sanity: init.sh is present in the cloned copy
+          test -x /tmp/openelis-demo-distro/scripts/init.sh
+
+      - name: Run init.sh (demo defaults)
+        working-directory: /tmp/openelis-demo-distro
+        run: ./scripts/init.sh --defaults
+
+      - name: Verify template scaffolding was removed
+        working-directory: /tmp/openelis-demo-distro
+        run: |
+          test ! -f copier.yml
+          test ! -f CREATING-A-DISTRO.md
+          test ! -d tools/copier_tasks
+          test ! -f .github/workflows/pr.yml
+          test ! -f scripts/init.sh
+          if find . -name '*.jinja' -type f | grep -q .; then
+            echo "FAIL: .jinja sources still present after init.sh" >&2
+            find . -name '*.jinja' -type f
+            exit 1
+          fi
+
+      - name: Validate the initialized distro
+        working-directory: /tmp/openelis-demo-distro
         run: |
           python tools/contextualize/oe_context.py doctor
           python tools/contextualize/oe_context.py apply --profile demo --non-interactive --dry-run
           python tools/contextualize/oe_context.py apply --profile demo --non-interactive
           test -d configs/analyzer-profiles/.active/hl7
+          # Generated distro's release workflow rendered correctly
+          test -f .github/workflows/release.yml
+          # And the demo stack composes cleanly
           cp .env.example .env
           docker compose config
