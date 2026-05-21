@@ -24,12 +24,17 @@ if [[ ! -f copier.yml ]]; then
 fi
 
 ensure_copier() {
+  # pipx places binaries in $HOME/.local/bin. Some shells don't have that
+  # on PATH by default — but the binary may already be installed there.
+  # Prepend it BEFORE the existence check so we find pre-existing installs.
+  export PATH="$HOME/.local/bin:$PATH"
   if command -v copier > /dev/null 2>&1; then return; fi
   if command -v pipx > /dev/null 2>&1; then
     echo "[init] Installing copier via pipx..."
-    pipx install copier
-    export PATH="$HOME/.local/bin:$PATH"
-    command -v copier > /dev/null 2>&1 && return
+    # `pipx install` may print "already installed" and return non-zero;
+    # the post-install command -v check is the real verification.
+    pipx install copier 2>&1 || true
+    if command -v copier > /dev/null 2>&1; then return; fi
   fi
   cat <<'EOF' >&2
 init.sh: copier is required and isn't installed.
@@ -53,6 +58,47 @@ echo "[init] Syncing rendered output back over $ROOT..."
 # rsync preserves perms (the executable bit on scripts/*.sh).
 # Exclude .git so any existing history is preserved.
 rsync -a --exclude='.git/' "$TMP/" "$ROOT/"
+
+echo "[init] Rewriting .copier-answers.yml against the canonical upstream..."
+# copier copy from a local path records `_src_path: .` and `_commit:
+# <local-hash>`. After we delete copier.yml below, that local path is no
+# longer a valid template, and the local commit hash isn't reachable from
+# the upstream repo — so `copier update` would fail twice over.
+#
+# Point _src_path at the canonical upstream and replace _commit with the
+# upstream's current HEAD (resolved via `git ls-remote`). Both can be
+# overridden by env vars so this works for forks of the template.
+UPSTREAM_URL="${OPENELIS_TEMPLATE_UPSTREAM:-https://github.com/DIGI-UW/openelis-distro-template.git}"
+UPSTREAM_COPIER_PATH="${OPENELIS_TEMPLATE_COPIER_PATH:-gh:DIGI-UW/openelis-distro-template}"
+ANSWERS="$ROOT/.copier-answers.yml"
+
+UPSTREAM_COMMIT="$(git ls-remote "$UPSTREAM_URL" HEAD 2>/dev/null | cut -f1 || true)"
+if [[ -z "$UPSTREAM_COMMIT" ]]; then
+  echo "[init] WARN: could not resolve upstream HEAD (offline?). _commit will be" \
+       "removed; set it manually to a valid upstream ref before 'copier update'."
+fi
+
+if [[ -f "$ANSWERS" ]]; then
+  python3 - "$ANSWERS" "$UPSTREAM_COPIER_PATH" "${UPSTREAM_COMMIT:-}" <<'PY'
+import sys, re
+path, upstream, commit = sys.argv[1], sys.argv[2], sys.argv[3]
+text = open(path, encoding="utf-8").read()
+# _src_path: replace or insert
+text, n = re.subn(r'^_src_path:.*$', f'_src_path: {upstream}',
+                  text, count=1, flags=re.MULTILINE)
+if not n:
+    text = f"_src_path: {upstream}\n" + text
+# _commit: replace, insert, or remove
+if commit:
+    text, n = re.subn(r'^_commit:.*$', f'_commit: {commit}',
+                      text, count=1, flags=re.MULTILINE)
+    if not n:
+        text = f"_commit: {commit}\n" + text
+else:
+    text = re.sub(r'^_commit:.*\n?', '', text, count=1, flags=re.MULTILINE)
+open(path, "w", encoding="utf-8").write(text)
+PY
+fi
 
 echo "[init] Removing template scaffolding..."
 # .jinja source files — the rendered counterparts have just been written.
