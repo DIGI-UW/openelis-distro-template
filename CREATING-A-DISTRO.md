@@ -24,26 +24,83 @@ the same flow applies to any country/site.
 - `gh` CLI authenticated to GitHub (only needed if you'll cut a release
   from the new repo's release workflow).
 
-## Phase 1 — Generate the repo (~5 minutes)
+## Phase 1 — Create the repo and initialize it (~5 minutes)
+
+1. On the template repo page, click **Use this template → Create a new
+   repository**. Name your new repo (e.g. `openelis-png-distro`),
+   choose an org/visibility, and create it.
+
+2. Clone the new repo and `cd` into it:
+   ```bash
+   git clone git@github.com:<your-org>/openelis-png-distro.git
+   cd openelis-png-distro
+   ```
+
+3. Run the init script:
+   ```bash
+   ./scripts/init.sh
+   ```
+   You'll be prompted for the answers below. Sensible PNG choices shown:
+
+   | Prompt | PNG value | Notes |
+   | ------ | --------- | ----- |
+   | `context_slug` | `png` | Lowercase. Flows into compose project name, network name, tarball basename. |
+   | `context_name` | `Papua New Guinea` | Free-form. Ends up in OE banner, common.properties country field. |
+   | `project_name` | `OpenELIS PNG Distro` | Display name on README, release titles. |
+   | `timezone` | `Pacific/Port_Moresby` | IANA timezone, passed as `TZ` to every container. |
+   | `default_nationality` | `PNG` | OE `DEFAULT_NATIONALITY` env var. |
+   | `facility_id` | `png-default` | OE `org.openelisglobal.facility.id`. |
+   | `public_hostname` | `openelis.health.gov.pg` | TLS cert subject + redirect target. |
+   | `tarball_basename` | `openelis-png-distro` (default) | `<basename>-<version>.tar.gz` for releases. |
+
+   The script:
+   - Installs Copier via `pipx` if it isn't already on your PATH (fails
+     with instructions if `pipx` is also missing).
+   - Runs Copier in place, rendering every `.jinja` file against your
+     answers.
+   - Runs the post-generate tasks: replaces `__GENERATED_SECRET__`
+     sentinels in `.env.example` with `secrets.token_urlsafe(32)` random
+     values, and materializes
+     `configs/analyzer-profiles/.active/` from
+     `core/ + distro/`.
+   - Deletes the template-only scaffolding (`copier.yml`,
+     `CREATING-A-DISTRO.md`, `tools/copier_tasks/`,
+     `.github/workflows/pr.yml`) and self-deletes.
+
+   After it finishes, the repo is no longer a template — it's a
+   self-contained distro.
+
+4. Watch for these output lines confirming the post-generate tasks ran:
+   ```
+   generate_secrets: replaced 2 sentinel(s)
+   merge_profiles: 12 copied, 0 overridden (distro/ wins)
+   ```
+
+### Scripted (non-interactive) init
+
+For automation, pass `--defaults` plus `--data key=value` for every
+prompt you want to override:
+
+```bash
+./scripts/init.sh \
+    --data context_slug=png \
+    --data 'context_name=Papua New Guinea' \
+    --data 'project_name=OpenELIS PNG Distro' \
+    --data 'timezone=Pacific/Port_Moresby' \
+    --data 'default_nationality=PNG' \
+    --data 'facility_id=png-default' \
+    --data 'public_hostname=openelis.health.gov.pg' \
+    --defaults
+```
+
+### Alternative: run Copier directly without the button
 
 ```bash
 pipx install copier
-copier copy --trust \
-  gh:DIGI-UW/openelis-distro-template \
-  openelis-png-distro
+copier copy --trust gh:DIGI-UW/openelis-distro-template openelis-png-distro
 ```
 
-This template runs Copier post-generate tasks to materialize per-distro
-random secrets and merge the analyzer-profile tree. Those tasks are
-gated behind a trust prompt by default. Interactively you'll see
-*"Do you trust this template's tasks?"* — answering `y` runs them.
-`--trust` skips the prompt, which is required when running
-non-interactively (CI, scripts with `--defaults`). If you decline the
-prompt or run non-interactively without `--trust`, `.env.example` keeps
-the `__GENERATED_SECRET__` sentinels and
-`configs/analyzer-profiles/.active/` is empty — you'd need to re-run
-`copier copy --trust` or run `oe_context.py apply` manually before the
-stack will boot.
+Same result. Use whichever you prefer.
 
 You'll be prompted for the answers below. Sensible PNG choices shown:
 
@@ -72,9 +129,7 @@ with `--trust`.
 ## Phase 2 — Verify boot-by-default (~15 minutes)
 
 ```bash
-cd openelis-png-distro
-git init && git add -A && git commit -m "chore: bootstrap openelis-png-distro from template"
-
+# init.sh already left .env.example with rendered random secrets.
 cp .env.example .env
 docker compose up -d
 ```

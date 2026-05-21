@@ -7,9 +7,19 @@ _exclude:
   # Template-side documentation, for the person creating a new distro.
   # Generated distros get their own README.md.jinja-rendered README.
   - CREATING-A-DISTRO.md
-  # Template repo's own CI (exercises copier copy on every PR) — not for
-  # generated distros. The release workflow added by C8 is .jinja-suffixed
-  # and ships normally.
+  # Note on README.md: NOT excluded. The template repo carries both a
+  # plain README.md (for GitHub display on this repo) and README.md.jinja
+  # (the generated distro's README). Both render to the destination path
+  # `README.md`. Copier resolves this collision deterministically — the
+  # .jinja-suffixed file wins — so generated distros get the rendered
+  # README, never the template's own. Adding README.md to _exclude here
+  # would skip the .jinja-rendered output too (excludes match destination
+  # paths, not source).
+  # In-place bootstrap script. Lives in the template source so a fresh
+  # "Use this template" clone has it; init.sh self-deletes after running.
+  - scripts/init.sh
+  # Template repo's own CI (exercises the init.sh flow on every PR) —
+  # generated distros get release.yml only.
   - .github/workflows/pr.yml
   # Build-time-only post-generate tasks, run from the template source.
   - tools/copier_tasks
